@@ -98,6 +98,78 @@ def generate_dot(fields_data):
     return result
 
 
+def generate_plantuml(fields_data):
+    result = []
+
+    for field, model in fields_data:
+        sources, targets, edges, any_targets, any_except_targets = set(), set(), set(), set(), set()
+
+        # dump nodes and edges
+        for transition in field.get_all_transitions(model):
+            if transition.source == '*':
+                any_targets.add((transition.target, transition.name))
+            elif transition.source == '+':
+                any_except_targets.add((transition.target, transition.name))
+            else:
+                if transition.target is not None:
+                    source_name = transition.source
+                    target_name = transition.target
+                    if isinstance(transition.source, int):
+                        source_label = \
+                        [smart_text(name[1]) for name in field.choices if
+                         name[0] == transition.source][0]
+                    else:
+                        source_label = transition.source
+                    sources.add((source_name, source_label))
+                    if isinstance(transition.target, int):
+                        target_label = \
+                        [smart_text(name[1]) for name in field.choices if
+                         name[0] == transition.target][0]
+                    else:
+                        target_label = transition.target
+                    targets.add((target_name, target_label))
+                    edges.add((source_name, target_name,
+                               (('label', transition.name),)))
+            if transition.on_error:
+                on_error_name = node_name(field, transition.on_error)
+                targets.add((on_error_name, transition.on_error))
+                edges.add(
+                    (source_name, on_error_name, (('style', 'dotted'),)))
+
+        for target, name in any_targets:
+            target_name = node_name(field, target)
+            targets.add((target_name, target))
+            for source_name, label in sources:
+                edges.add((source_name, target_name, (('label', name),)))
+
+        for target, name in any_except_targets:
+            target_name = node_name(field, target)
+            targets.add((target_name, target))
+            for source_name, label in sources:
+                if target_name == source_name:
+                    continue
+                edges.add((source_name, target_name, (('label', name),)))
+
+        # construct subgraph
+        opts = field.model._meta
+        result.append(u".. uml:: {}.{}.{}".format(opts.app_label, opts.object_name, field.name))
+        result.append('    @startuml')
+
+        final_states = targets - sources
+        for name, label in sorted((sources | targets) - final_states):
+            if field.default:  # Adding initial state notation
+                if label == field.default:
+                    result.append('    (*) --> {}'.format(name))
+        for source_name, target_name, attrs in sorted(edges):
+            result.append('    {} --> {}'.format(source_name, target_name))
+        for name, label in sorted(final_states):
+            result.append('    {} --> (*)'.format(name))
+        result.append('    @enduml')
+        result.append('')
+
+    return '\n'.join(result)
+
+
 class Command(BaseCommand):
     requires_system_checks = True
 
@@ -109,6 +181,8 @@ class Command(BaseCommand):
         make_option('--layout', '-l', action='store', dest='layout', default='dot',
                     help=('Layout to be used by GraphViz for visualization. '
                           'Layouts: circo dot fdp neato nop nop1 nop2 twopi')),
+        make_option('--plantuml', '-p', action='store_true', dest='plantuml', default=False,
+                    help='Instead of generating GraphViz, output PlantUML text.'),
     )
 
     help = ("Creates a GraphViz dot file with transitions for selected fields")
@@ -158,9 +232,13 @@ class Command(BaseCommand):
                     for model in get_models(app):
                         fields_data += all_fsm_fields_data(model)
 
-        dotdata = generate_dot(fields_data)
+        if not options['plantuml']:
+            dotdata = generate_dot(fields_data)
 
-        if options['outputfile']:
-            self.render_output(dotdata, **options)
+            if options['outputfile']:
+                self.render_output(dotdata, **options)
+            else:
+                print(dotdata)
         else:
-            print(dotdata)
+            plantumldata = generate_plantuml(fields_data)
+            print(plantumldata)
