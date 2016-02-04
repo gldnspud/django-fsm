@@ -161,7 +161,11 @@ def generate_plantuml(fields_data):
                 if label == field.default:
                     result.append('    [*] --> {}'.format(name))
         for source_name, target_name, attrs in sorted(edges):
-            result.append('    {} --> {}'.format(source_name, target_name))
+            attrs = dict(attrs)
+            edge_text = '    {} --> {}'.format(source_name, target_name)
+            if attrs.get('label'):
+                edge_text += ' : {}'.format(attrs['label'])
+            result.append(edge_text)
         for name, label in sorted(final_states):
             result.append('    {} --> [*]'.format(name))
         result.append('    @enduml')
