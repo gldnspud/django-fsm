@@ -159,11 +159,11 @@ def generate_plantuml(fields_data):
         for name, label in sorted((sources | targets) - final_states):
             if field.default:  # Adding initial state notation
                 if label == field.default:
-                    result.append('    (*) --> {}'.format(name))
+                    result.append('    [*] --> {}'.format(name))
         for source_name, target_name, attrs in sorted(edges):
             result.append('    {} --> {}'.format(source_name, target_name))
         for name, label in sorted(final_states):
-            result.append('    {} --> (*)'.format(name))
+            result.append('    {} --> [*]'.format(name))
         result.append('    @enduml')
         result.append('')
 
